@@ -204,5 +204,5 @@ This framework is intended for **authorized security research and educational pu
 ## 👤 Author
 
 **Alexander Hagenah**
-- Twitter: [@xaitax](https://twitter.com/xaitax)
-- GitHub: [@xaitax](https://github.com/xaitax)
+- [@xaitax](https://x.com/xaitax)
+- [LinkedIn](https://www.linkedin.com/in/alexhagenah/)
