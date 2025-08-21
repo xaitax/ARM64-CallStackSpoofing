@@ -28,7 +28,7 @@ NV_REG_SAVE_EXEC        EQU     NV_REG_PAIRS_EXEC * 0x10
 PROLOGUE_SIZE_EXEC      EQU     FRAME_SAVE_SIZE + NV_REG_SAVE_EXEC
 
 ; =================================================================
-; SpoofCallStack: Single frame spoofing (unchanged)
+; SpoofCallStack: Single frame spoofing
 ; =================================================================
 SpoofCallStack PROC
     stp     x29, x30, [sp, #-PROLOGUE_SIZE_SPOOF]!
@@ -65,7 +65,7 @@ SkipStore
     ENDP
 
 ; =================================================================
-; SpoofCallStackAdvanced: ENHANCED multi-frame spoofing
+; SpoofCallStackAdvanced: Multi-frame spoofing
 ; This version properly chains frames for Windows stack walking
 ; =================================================================
 SpoofCallStackAdvanced PROC
@@ -171,7 +171,7 @@ SingleFrame
     ENDP
 
 ; =================================================================
-; Utility functions (unchanged)
+; Utility functions
 ; =================================================================
 GetCurrentStackPointer PROC
     mov     x0, sp
@@ -236,4 +236,3 @@ ExecuteWithFakeFrame PROC
     ENDP
 
     END
-    
