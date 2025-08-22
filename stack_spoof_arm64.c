@@ -218,6 +218,52 @@ __declspec(noinline) DWORD WINAPI SecretFunction(LPVOID param)
     return g_secretValue;
 }
 
+/**
+ * @brief Target function to launch a process (notepad.exe)
+ *
+ * This function will be called using one of the spoofing techniques.
+ * The process creation will appear to originate from a legitimate context.
+ *
+ * @param param Unused parameter
+ * @return TRUE if process was launched successfully, FALSE otherwise
+ */
+__declspec(noinline) BOOL WINAPI LaunchNotepad(LPVOID param)
+{
+    UNREFERENCED_PARAMETER(param);
+    printf("\n  [>] Executing concealed function: LaunchNotepad\n");
+
+    wchar_t cmd[] = L"C:\\Windows\\System32\\notepad.exe";
+    STARTUPINFOW si = {sizeof(si)};
+    PROCESS_INFORMATION pi = {0};
+
+    BOOL success = CreateProcessW(
+        NULL,
+        cmd,
+        NULL,
+        NULL,
+        FALSE,
+        0,
+        NULL,
+        NULL,
+        &si,
+        &pi);
+
+    if (success)
+    {
+        printf("  [>] Successfully launched notepad.exe (PID: %lu)\n", pi.dwProcessId);
+        CloseHandle(pi.hProcess);
+        CloseHandle(pi.hThread);
+    }
+    else
+    {
+        printf("  [ERROR] Failed to launch notepad.exe (Error: %lu)\n", GetLastError());
+    }
+
+    // No stack trace here to keep output clean for this specific scenario
+    printf("\n  [>] Operation complete\n");
+    return success;
+}
+
 /* ============================================================================
  * UTILITY FUNCTIONS
  * ============================================================================ */
@@ -468,6 +514,7 @@ void TestNormalExecution(void)
     printf("[INFO] Result: 0x%08X\n", result);
 
     g_stats.totalExecutions++;
+    g_stats.baselineExecutions++;
     g_stats.totalTimeMs += elapsed;
 }
 
@@ -509,7 +556,9 @@ void TestBasicSpoofing(void)
     printf("[DEBUG] Real return address was: 0x%p\n", realReturn);
 
     g_stats.totalExecutions++;
-    g_stats.successfulSpoofs++;
+    g_stats.spoofAttempts++;
+    if (result)
+        g_stats.successfulSpoofs++;
     g_stats.totalTimeMs += elapsed;
 }
 
@@ -582,7 +631,9 @@ void TestAdvancedSpoofing(void)
     printf("[INFO] Expected: %d spoofed frames should appear in the call stack\n", CHAIN_DEPTH);
 
     g_stats.totalExecutions++;
-    g_stats.successfulSpoofs++;
+    g_stats.spoofAttempts++;
+    if (result)
+        g_stats.successfulSpoofs++;
     g_stats.totalTimeMs += elapsed;
 }
 
@@ -628,10 +679,13 @@ void TestFakeFrameExecution(void)
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&start);
 
+    // Disable stack capture for this test to avoid polluting output
+    g_captureStack = FALSE;
     DWORD64 result = ExecuteWithFakeFrame(
         SecretFunction,
         &fakeFrame,
         (LPVOID)0x44444444);
+    g_captureStack = TRUE; // Re-enable for other tests
 
     QueryPerformanceCounter(&end);
     DWORD64 elapsed = ((end.QuadPart - start.QuadPart) * 1000) / freq.QuadPart;
@@ -645,7 +699,80 @@ void TestFakeFrameExecution(void)
     printf("[DEBUG] Released isolated stack memory\n");
 
     g_stats.totalExecutions++;
-    g_stats.successfulSpoofs++;
+    g_stats.spoofAttempts++;
+    if (result)
+        g_stats.successfulSpoofs++;
+    g_stats.totalTimeMs += elapsed;
+}
+
+/**
+ * @brief Scenario 5: Spoofed process launch using stack pivoting
+ */
+void TestProcessLaunchSpoofing(void)
+{
+    PrintSeparator("SCENARIO 5: SPOOFED PROCESS LAUNCH VIA STACK PIVOTING");
+
+    printf("\n[INFO] Preparing isolated execution environment for process launch\n");
+    printf("[INFO] Goal: Launch notepad.exe from a concealed call stack\n");
+
+    // Allocate isolated stack
+    SIZE_T fakeStackSize = DEFAULT_STACK_SIZE;
+    void *fakeStackBase = VirtualAlloc(
+        NULL,
+        fakeStackSize,
+        MEM_COMMIT | MEM_RESERVE,
+        PAGE_READWRITE);
+
+    if (!fakeStackBase)
+    {
+        printf("[ERROR] Failed to allocate isolated stack (Error: %lu)\n", GetLastError());
+        return;
+    }
+
+    printf("[SUCCESS] Allocated %zu KB isolated stack at 0x%p\n",
+           fakeStackSize / 1024, fakeStackBase);
+
+    // Prepare fake frame for the process launch
+    void *fakeStackTop = (void *)((ULONG_PTR)fakeStackBase + fakeStackSize);
+    FAKE_FRAME_DATA fakeFrame = {
+        .fakeFp = (void *)((ULONG_PTR)fakeStackTop - 0x100),
+        .fakeLr = GetRandomGadget(&g_gadgetCache),
+        .fakeSp = fakeStackTop};
+
+    printf("[INFO] Fake frame configuration:\n");
+    printf("      FP: 0x%p\n", fakeFrame.fakeFp);
+    printf("      LR: 0x%p\n", fakeFrame.fakeLr);
+    printf("      SP: 0x%p\n", fakeFrame.fakeSp);
+
+    LARGE_INTEGER start, end, freq;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&start);
+
+    DWORD64 result = ExecuteWithFakeFrame(
+        LaunchNotepad,
+        &fakeFrame,
+        NULL); // No parameter needed for LaunchNotepad
+
+    QueryPerformanceCounter(&end);
+    DWORD64 elapsed = ((end.QuadPart - start.QuadPart) * 1000) / freq.QuadPart;
+
+    if (result)
+    {
+        printf("\n[SUCCESS] Isolated process launch completed in %llu ms\n", elapsed);
+    }
+    else
+    {
+        printf("\n[FAILURE] Isolated process launch failed in %llu ms\n", elapsed);
+    }
+
+    // Cleanup
+    VirtualFree(fakeStackBase, 0, MEM_RELEASE);
+    printf("[DEBUG] Released isolated stack memory\n");
+
+    g_stats.totalExecutions++;
+    g_stats.spoofAttempts++;
+    if (result)
+        g_stats.successfulSpoofs++;
     g_stats.totalTimeMs += elapsed;
 }
 
@@ -659,8 +786,8 @@ void PrintStatistics(void)
     printf("\n");
     printf("  Performance Metrics:\n");
     printf("    * Total Executions:     %d\n", g_stats.totalExecutions);
-    printf("    * Baseline Tests:       1\n"); // We always run 1 baseline
-    printf("    * Spoofing Attempts:    %d\n", g_stats.totalExecutions - 1);
+    printf("    * Baseline Tests:       %d\n", g_stats.baselineExecutions);
+    printf("    * Spoofing Attempts:    %d\n", g_stats.spoofAttempts);
     printf("    * Successful Spoofs:    %d\n", g_stats.successfulSpoofs);
     printf("    * Gadgets Discovered:   %d\n", g_stats.gadgetsDiscovered);
 
@@ -669,9 +796,9 @@ void PrintStatistics(void)
         DWORD64 avgTime = g_stats.totalTimeMs / g_stats.totalExecutions;
         printf("    * Average Exec Time:    %llu ms\n", avgTime);
 
-        if (g_stats.totalExecutions > 1)
+        if (g_stats.spoofAttempts > 0)
         {
-            double successRate = (double)g_stats.successfulSpoofs / (g_stats.totalExecutions - 1) * 100.0;
+            double successRate = (double)g_stats.successfulSpoofs / g_stats.spoofAttempts * 100.0;
             printf("    * Spoofing Success:     %.1f%%\n", successRate);
         }
     }
@@ -679,11 +806,11 @@ void PrintStatistics(void)
     printf("\n  Security Analysis:\n");
     printf("    * EDR Evasion Level:    ");
 
-    if (g_stats.successfulSpoofs == g_stats.totalExecutions - 1)
+    if (g_stats.spoofAttempts > 0 && g_stats.successfulSpoofs == g_stats.spoofAttempts)
     {
         printf("MAXIMUM (All spoofing techniques successful)\n");
     }
-    else if (g_stats.successfulSpoofs >= (g_stats.totalExecutions - 1) * 0.75)
+    else if (g_stats.spoofAttempts > 0 && g_stats.successfulSpoofs >= g_stats.spoofAttempts * 0.75)
     {
         printf("HIGH (Most spoofing techniques successful)\n");
     }
@@ -707,7 +834,7 @@ void PrintStatistics(void)
     }
 
     printf("    * Technique Coverage:   ");
-    printf("Single-Frame | Multi-Frame | Stack Pivot \n");
+    printf("Single-Frame | Multi-Frame | Stack Pivot | Process Launch\n");
 }
 
 /* ============================================================================
@@ -746,6 +873,7 @@ int main(void)
     TestBasicSpoofing();
     TestAdvancedSpoofing();
     TestFakeFrameExecution();
+    TestProcessLaunchSpoofing();
 
     // Print summary
     PrintStatistics();

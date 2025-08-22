@@ -22,8 +22,8 @@ This framework demonstrates call stack spoofing techniques specifically designed
 ================================================================================
 
 System Information:
-  * Process ID:        24052
-  * Thread ID:         24904
+  * Process ID:        18544
+  * Thread ID:         24376
   * Architecture:      ARM64
   * Processor Count:   12
   * Page Size:         0x1000 bytes
@@ -60,19 +60,19 @@ System Information:
 ================================================================================
   SCENARIO 2: SINGLE-FRAME CALL STACK SPOOFING
 ================================================================================
-[DEBUG] Selected gadget[184/512]: 0x00007FFC0ACB6610
+[DEBUG] Selected gadget[496/512]: 0x00007FFC0ACBB4C8
 
 [INFO] Executing with spoofed return address
 [INFO] Gadget source: ntdll.dll
-[INFO] Spoofed return: 0x00007FFC0ACB6610
+[INFO] Spoofed return: 0x00007FFC0ACBB4C8
 
   [>] Executing concealed function
       Parameter: 0x22222222
 
   [STACK TRACE] From inside concealed function:
       [00] SecretFunction                   + 0x0078 <-- TARGET
-      [01] RtlTestAndPublishWnfStateData    + 0x0070
-      [02] main                             + 0x03AC
+      [01] RtlRemoveVectoredExceptionHandler + 0x0048
+      [02] main                             + 0x03B8
       [03] mainCRTStartup                   + 0x0014
       [04] BaseThreadInitThunk              + 0x0040
       [05] RtlUserThreadStart               + 0x0044
@@ -81,7 +81,7 @@ System Information:
 
 [SUCCESS] Spoofed execution completed in 0 ms
 [INFO] Result: 0xFC8F9CCD
-[DEBUG] Real return address was: 0x00007FF759E2CA24
+[DEBUG] Real return address was: 0x00007FF70153D008
 
 ================================================================================
   SCENARIO 3: TRUE MULTI-FRAME CALL CHAIN SPOOFING
@@ -91,12 +91,12 @@ System Information:
 [INFO] This technique creates real frames with spoofed return addresses
 
   Multi-frame chain composition:
-[DEBUG] Selected gadget[5/512]: 0x00007FFC0ACB3318
-    Frame[0]: 0x00007FFC0ACB3318 (LdrAppxHandleIntegrityFailure+0x68)
-[DEBUG] Selected gadget[269/512]: 0x00007FFC0ACB7A68
-    Frame[1]: 0x00007FFC0ACB7A68 (RtlWnfDllUnloadCallback+0x1038)
-[DEBUG] Selected gadget[218/512]: 0x00007FFC0ACB6F08
-    Frame[2]: 0x00007FFC0ACB6F08 (RtlWnfDllUnloadCallback+0x4D8)
+[DEBUG] Selected gadget[226/512]: 0x00007FFC0ACB703C
+    Frame[0]: 0x00007FFC0ACB703C (RtlWnfDllUnloadCallback+0x60C)
+[DEBUG] Selected gadget[90/512]: 0x00007FFC0ACB4CE0
+    Frame[1]: 0x00007FFC0ACB4CE0 (LdrControlFlowGuardEnforced+0x990)
+[DEBUG] Selected gadget[249/512]: 0x00007FFC0ACB7570
+    Frame[2]: 0x00007FFC0ACB7570 (RtlWnfDllUnloadCallback+0xB40)
 
 [INFO] Executing with 3 levels of recursion, each with spoofed return
 
@@ -105,11 +105,11 @@ System Information:
 
   [STACK TRACE] From inside concealed function:
       [00] SecretFunction                   + 0x0078 <-- TARGET
-      [01] RtlWnfDllUnloadCallback          + 0x04D8
+      [01] RtlWnfDllUnloadCallback          + 0x0B40
       [02] RecursiveSpoofHelper             + 0x0064
-      [03] RtlWnfDllUnloadCallback          + 0x1038
+      [03] LdrControlFlowGuardEnforced      + 0x0990
       [04] RecursiveSpoofHelper             + 0x0064
-      [05] LdrAppxHandleIntegrityFailure    + 0x0068
+      [05] RtlWnfDllUnloadCallback          + 0x060C
       [06] RecursiveSpoofHelper             + 0x0064
       [07] mainCRTStartup                   + 0x0014
       [08] BaseThreadInitThunk              + 0x0040
@@ -126,17 +126,15 @@ System Information:
 ================================================================================
 
 [INFO] Preparing isolated execution environment
-[SUCCESS] Allocated 64 KB isolated stack at 0x000002AFDA9C0000
-[DEBUG] Selected gadget[435/512]: 0x00007FFC0ACBA45C
+[SUCCESS] Allocated 64 KB isolated stack at 0x000001E1A7A50000
+[DEBUG] Selected gadget[57/512]: 0x00007FFC0ACB4338
 [INFO] Fake frame configuration:
-      FP: 0x000002AFDA9CFF00
-      LR: 0x00007FFC0ACBA45C
-      SP: 0x000002AFDA9D0000
+      FP: 0x000001E1A7A5FF00
+      LR: 0x00007FFC0ACB4338
+      SP: 0x000001E1A7A60000
 
   [>] Executing concealed function
       Parameter: 0x44444444
-
-  [STACK TRACE] From inside concealed function:
 
   [>] Operation complete (Result: 0x9AE9FAAB)
 
@@ -146,22 +144,43 @@ System Information:
 [DEBUG] Released isolated stack memory
 
 ================================================================================
+  SCENARIO 5: SPOOFED PROCESS LAUNCH VIA STACK PIVOTING
+================================================================================
+
+[INFO] Preparing isolated execution environment for process launch
+[INFO] Goal: Launch notepad.exe from a concealed call stack
+[SUCCESS] Allocated 64 KB isolated stack at 0x000001E1A7A50000
+[DEBUG] Selected gadget[149/512]: 0x00007FFC0ACB5E28
+[INFO] Fake frame configuration:
+      FP: 0x000001E1A7A5FF00
+      LR: 0x00007FFC0ACB5E28
+      SP: 0x000001E1A7A60000
+
+  [>] Executing concealed function: LaunchNotepad
+  [>] Successfully launched notepad.exe (PID: 3704)
+
+  [>] Operation complete
+
+[SUCCESS] Isolated process launch completed in 43 ms
+[DEBUG] Released isolated stack memory
+
+================================================================================
   EXECUTION STATISTICS
 ================================================================================
 
   Performance Metrics:
-    * Total Executions:     4
+    * Total Executions:     5
     * Baseline Tests:       1
-    * Spoofing Attempts:    3
-    * Successful Spoofs:    3
+    * Spoofing Attempts:    4
+    * Successful Spoofs:    4
     * Gadgets Discovered:   512
-    * Average Exec Time:    0 ms
+    * Average Exec Time:    8 ms
     * Spoofing Success:     100.0%
 
   Security Analysis:
     * EDR Evasion Level:    MAXIMUM (All spoofing techniques successful)
     * Detection Surface:    MINIMAL (Maximum gadget entropy: 512 gadgets)
-    * Technique Coverage:   Single-Frame | Multi-Frame | Stack Pivot
+    * Technique Coverage:   Single-Frame | Multi-Frame | Stack Pivot | Process Launch
 
 [SUCCESS] All scenarios completed successfully
 [INFO] Final concealed value: 0x9AE9FAAB
@@ -171,18 +190,18 @@ System Information:
 
 ### How It Works
 
-1. **Gadget Discovery**: Scans `ntdll.dll` for legitimate call sites (instructions following `BL` opcodes)
-2. **Stack Manipulation**: Replaces return addresses with discovered gadgets
-3. **Frame Construction**: Builds fake call chains that appear legitimate to unwinders
-4. **Execution**: Target function executes with manipulated stack context
+1.  **Gadget Discovery**: Scans `ntdll.dll` for legitimate call sites (instructions following `BL` opcodes)
+2.  **Stack Manipulation**: Replaces return addresses with discovered gadgets
+3.  **Frame Construction**: Builds fake call chains that appear legitimate to unwinders
+4.  **Execution**: Target function executes with manipulated stack context
 
 ### Evasion Techniques
 
-| Technique | Description |
-|-----------|-------------|
-| **Single-Frame Spoofing** | Replaces immediate return address |
-| **Multi-Frame Recursion** | Creates deep fake call chains |
-| **Stack Pivoting** | Executes on isolated stack |
+| Technique                 | Description                                                                                                                              |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Single-Frame Spoofing** | Replaces the immediate return address with a gadget, making the current function appear to be called by a legitimate system function.    |
+| **Multi-Frame Recursion** | Creates a deep, convincing call chain of multiple legitimate-looking stack frames, burying the true origin of execution.                 |
+| **Stack Pivoting**        | Executes the target function on an entirely separate, isolated stack, which completely breaks standard stack walking and analysis tools. |
 
 ### Architecture Support
 
@@ -190,6 +209,56 @@ This framework is specifically designed for ARM64 and leverages:
 - ARM64 calling convention (x29/x30 frame chain)
 - Windows ARM64 ABI specifics
 - Exception handling data (.pdata) alignment
+
+## 🔬 Verifying Evasion with a Debugger
+
+The most effective technique, **Stack Pivoting**, completely breaks the call stack. While this is invisible to live monitoring tools (which is the goal), its success can be definitively proven using a debugger like WinDbg. By pausing the program at the exact moment of execution, we can witness the broken stack firsthand.
+
+### Step-by-Step Verification
+
+1.  **Launch the application in WinDbg:**
+
+2.  **Set a breakpoint on the target function.**
+    ```
+    0:000> bp stack_spoof!LaunchNotepad
+    ```
+
+3.  **Run the program.** The debugger will execute Scenarios 1-4 and then break when it enters `LaunchNotepad` in Scenario 5.
+    ```
+    0:000> g
+    ```
+
+4.  **Inspect the call stack.** Once the breakpoint is hit, we use the `k` command to display the call stack.
+    ```
+    Breakpoint 1 hit
+    stack_spoof!LaunchNotepad:
+    00007ff7`0153b1e8 d10043ff sub         sp,sp,#0x10
+    0:000> k
+    ```
+
+### Analyzing the Debugger Output
+
+The resulting call stack provides three key pieces of evidence that the evasion was successful.
+
+```
+WARNING: Stack pointer is outside the normal stack bounds. Stack unwinding can be inaccurate.
+ # Child-SP          RetAddr               Call Site
+00 000002c1`8e6dffe0 00007ff7`01531634     stack_spoof!LaunchNotepad [...] 
+01 000002c1`8e6dffe0 00000000`00000000     stack_spoof!ExecuteWithFakeFrame+0x54
+```
+
+1.  **The WinDbg Warning**
+    - **`WARNING: Stack pointer is outside the normal stack bounds.`**
+    - This is the most important piece of evidence. The debugger itself recognizes that the stack pointer is in an unexpected memory region (our isolated stack allocated with `VirtualAlloc`), not where a normal thread's stack should be. This is definitive proof that **Stack Pivoting** was successful.
+
+2.  **The Stack Pointer (`Child-SP`) Address**
+    - **`00 000002c1`8e6dffe0 ...`**
+    - The address of the stack frame is a high memory address corresponding to our newly allocated fake stack. This confirms the warning and proves the thread is no longer operating on its original stack.
+
+3.  **The Broken Call Chain**
+    - **`01 ... 00000000`00000000 stack_spoof!ExecuteWithFakeFrame+0x54`**
+    - The debugger attempts to unwind the stack from `LaunchNotepad`. It correctly identifies that the call originated from our assembly routine `ExecuteWithFakeFrame`. However, it cannot unwind any further. The return address for `ExecuteWithFakeFrame` is `NULL`, and the stack trace terminates abruptly.
+    - This is the proof that **stack walking is broken**. An EDR agent would see the same thing: a call to `CreateProcessW` that appears to originate from `LaunchNotepad`, which itself has no legitimate caller. The true origin is completely concealed.
 
 ## ⚠️ Disclaimer
 
